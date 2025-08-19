@@ -1,31 +1,37 @@
-FROM debian:bookworm-slim
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
+ENV USER=root
+ENV VNC_GEOMETRY=1920x1080
+ENV VNC_DEPTH=24
 
-WORKDIR /app/data
+# Cập nhật và cài đặt GNOME + VNC + các gói cần thiết
+RUN apt-get update && \
+    apt-get install -y \
+    ubuntu-desktop \
+    gnome-panel \
+    gnome-settings-daemon \
+    metacity \
+    nautilus \
+    gnome-terminal \
+    tigervnc-standalone-server \
+    tigervnc-common \
+    novnc \
+    websockify \
+    supervisor \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Update and install basic dependencies
-RUN apt update && \
-    apt upgrade -y && \
-    apt install -y --no-install-recommends \
-        ca-certificates \
-        curl \
-        git \
-        unzip \
-        zip \
-        tar \
-        jq \
-        wget && \
-    rm -rf /var/lib/apt/lists/*
+# Tạo password VNC mặc định
+RUN mkdir -p /root/.vnc && \
+    echo "123456" | vncpasswd -f > /root/.vnc/passwd && \
+    chmod 600 /root/.vnc/passwd
 
-# Enable 32-bit support & install required 32-bit libraries (only for x86_64)
-RUN if [ "$(dpkg --print-architecture)" = "amd64" ]; then \
-        dpkg --add-architecture i386 && \
-        apt update && \
-        apt install -y --no-install-recommends \
-            lib32gcc-s1 \
-            libsdl2-2.0-0:i386 && \
-        rm -rf /var/lib/apt/lists/*; \
-    fi
+# Tạo script khởi động VNC và noVNC
+RUN echo "#!/bin/bash\n\
+vncserver :1 -geometry $VNC_GEOMETRY -depth $VNC_DEPTH && \n\
+websockify --web=/usr/share/novnc/ --wrap-mode=ignore 8080 localhost:5901\n" \
+> /startup.sh && chmod +x /startup.sh
 
-CMD sh -c "$START"
+EXPOSE 5901 8080
+
+CMD ["/startup.sh"]
